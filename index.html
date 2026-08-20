@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RION Chat</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background: #f1f5f9;
+      min-height: 100vh;
+    }
+
+    .login-box {
+      width: 90%;
+      max-width: 400px;
+      margin: 100px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 20px;
+      text-align: center;
+      box-shadow: 0 10px 30px #0002;
+    }
+
+    .login-box h1 {
+      margin-bottom: 10px;
+    }
+
+    .login-btn {
+      margin-top: 25px;
+      width: 100%;
+      padding: 14px;
+      border: 0;
+      border-radius: 10px;
+      background: #111827;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #app {
+      display: none;
+      max-width: 1100px;
+      height: 90vh;
+      margin: 5vh auto;
+      background: white;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px #0002;
+    }
+
+    .sidebar {
+      width: 320px;
+      border-right: 1px solid #ddd;
+      padding: 20px;
+    }
+
+    .profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .profile img {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+    }
+
+    .logout {
+      margin-left: auto;
+      border: 0;
+      background: #ef4444;
+      color: white;
+      padding: 7px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    .search {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+
+    .user-result {
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+
+    .user-result:hover {
+      background: #f1f5f9;
+    }
+
+    .chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chat-header {
+      padding: 18px;
+      border-bottom: 1px solid #ddd;
+      font-weight: bold;
+    }
+
+    .messages {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 10px 14px;
+      border-radius: 15px;
+      margin-bottom: 10px;
+      background: #e5e7eb;
+      width: fit-content;
+    }
+
+    .mine {
+      margin-left: auto;
+      background: #111827;
+      color: white;
+    }
+
+    .send-area {
+      display: flex;
+      padding: 15px;
+      border-top: 1px solid #ddd;
+      gap: 10px;
+    }
+
+    .send-area input {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+    }
+
+    .send-area button {
+      padding: 12px 20px;
+      border: 0;
+      border-radius: 10px;
+      background: #111827;
+      color: white;
+      cursor: pointer;
+    }
+
+    @media(max-width:700px) {
+      #app {
+        width: 100%;
+        height: 100vh;
+        margin: 0;
+        border-radius: 0;
+      }
+
+      .sidebar {
+        width: 38%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+
+<div class="login-box" id="loginBox">
+  <h1>RION Chat</h1>
+  <p>Chat with your friends</p>
+
+  <button class="login-btn" onclick="googleLogin()">
+    Continue with Google
+  </button>
+</div>
+
+
+<!-- APP -->
+
+<div id="app">
+
+  <div class="sidebar">
+
+    <div class="profile">
+      <img id="myPhoto">
+      <div>
+        <b id="myName"></b>
+        <small id="myID"></small>
+      </div>
+
+      <button class="logout" onclick="logout()">Logout</button>
+    </div>
+
+    <input
+      class="search"
+      id="searchBox"
+      placeholder="Search User ID..."
+      oninput="searchUsers()"
+    >
+
+    <div id="searchResults"></div>
+
+  </div>
+
+
+  <div class="chat">
+
+    <div class="chat-header" id="chatHeader">
+      Select a user to start chatting
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+    <div class="send-area">
+
+      <input
+        id="messageInput"
+        placeholder="Write a message..."
+        onkeydown="if(event.key==='Enter') sendMessage()"
+      >
+
+      <button onclick="sendMessage()">Send</button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<script type="module">
+
+  import {
+    initializeApp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+  import {
+    getAuth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    onAuthStateChanged,
+    signOut
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+  import {
+    getFirestore,
+    doc,
+    setDoc,
+    getDoc,
+    collection,
+    query,
+    where,
+    getDocs,
+    addDoc,
+    orderBy,
+    onSnapshot,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+
+  // =====================================
+  // 🔥 PASTE YOUR FIREBASE CONFIG HERE
+  // =====================================
+
+  const firebaseConfig = {
+
+    apiKey: "YOUR_API_KEY",
+
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+
+    projectId: "YOUR_PROJECT_ID",
+
+    storageBucket: "YOUR_PROJECT.appspot.com",
+
+    messagingSenderId: "YOUR_SENDER_ID",
+
+    appId: "YOUR_APP_ID"
+
+  };
+
+
+  const app = initializeApp(firebaseConfig);
+
+  const auth = getAuth(app);
+
+  const db = getFirestore(app);
+
+  const provider = new GoogleAuthProvider();
+
+
+  let currentUser = null;
+
+  let selectedUser = null;
+
+  let unsubscribeMessages = null;
+
+
+  // =====================================
+  // GOOGLE LOGIN
+  // =====================================
+
+  window.googleLogin = async function() {
+
+    try {
+
+      await signInWithPopup(auth, provider);
+
+    } catch(error) {
+
+      alert(error.message);
+
+    }
+
+  };
+
+
+  // =====================================
+  // AUTH STATE
+  // =====================================
+
+  onAuthStateChanged(auth, async(user) => {
+
+    if(user) {
+
+      currentUser = user;
+
+      document.getElementById("loginBox").style.display = "none";
+
+      document.getElementById("app").style.display = "flex";
+
+      document.getElementById("myName").innerText =
+        user.displayName || "User";
+
+      document.getElementById("myPhoto").src =
+        user.photoURL || "";
+
+      const userRef = doc(db, "users", user.uid);
+
+      const userSnap = await getDoc(userRef);
+
+      if(!userSnap.exists()) {
+
+        const username =
+          "user" + Math.floor(100000 + Math.random() * 900000);
+
+        await setDoc(userRef, {
+
+          uid: user.uid,
+
+          name: user.displayName || "User",
+
+          email: user.email,
+
+          username: username,
+
+          photoURL: user.photoURL || "",
+
+          createdAt: serverTimestamp()
+
+        });
+
+        document.getElementById("myID").innerText =
+          "@" + username;
+
+      } else {
+
+        document.getElementById("myID").innerText =
+          "@" + userSnap.data().username;
+
+      }
+
+    } else {
+
+      document.getElementById("loginBox").style.display = "block";
+
+      document.getElementById("app").style.display = "none";
+
+    }
+
+  });
+
+
+  // =====================================
+  // LOGOUT
+  // =====================================
+
+  window.logout = function() {
+
+    signOut(auth);
+
+  };
+
+
+  // =====================================
+  // SEARCH USERS
+  // =====================================
+
+  window.searchUsers = async function() {
+
+    const text =
+      document.getElementById("searchBox").value
+      .trim()
+      .toLowerCase();
+
+    const result =
+      document.getElementById("searchResults");
+
+    result.innerHTML = "";
+
+    if(!text) return;
+
+
+    const usersRef = collection(db, "users");
+
+    const q = query(
+      usersRef,
+      where("username", "==", text)
+    );
+
+    const snapshot = await getDocs(q);
+
+
+    snapshot.forEach((docSnap) => {
+
+      const user = docSnap.data();
+
+      if(user.uid === currentUser.uid) return;
+
+
+      const div = document.createElement("div");
+
+      div.className = "user-result";
+
+      div.innerHTML = `
+        <b>${user.name}</b><br>
+        <small>@${user.username}</small>
+      `;
+
+      div.onclick = () => openChat(user);
+
+      result.appendChild(div);
+
+    });
+
+  };
+
+
+  // =====================================
+  // OPEN CHAT
+  // =====================================
+
+  function openChat(user) {
+
+    selectedUser = user;
+
+    document.getElementById("chatHeader").innerText =
+      user.name + "  @" + user.username;
+
+    document.getElementById("messages").innerHTML = "";
+
+
+    if(unsubscribeMessages)
+      unsubscribeMessages();
+
+
+    const chatID = makeChatID(
+      currentUser.uid,
+      selectedUser.uid
+    );
+
+
+    const messagesRef =
+      collection(db, "chats", chatID, "messages");
+
+
+    const q = query(
+      messagesRef,
+      orderBy("timestamp", "asc")
+    );
+
+
+    unsubscribeMessages = onSnapshot(q, (snapshot) => {
+
+      const box =
+        document.getElementById("messages");
+
+      box.innerHTML = "";
+
+
+      snapshot.forEach((docSnap) => {
+
+        const msg = docSnap.data();
+
+        const div =
+          document.createElement("div");
+
+        div.className = "message";
+
+        if(msg.senderId === currentUser.uid)
+          div.classList.add("mine");
+
+        div.innerText = msg.text;
+
+        box.appendChild(div);
+
+      });
+
+
+      box.scrollTop = box.scrollHeight;
+
+    });
+
+  }
+
+
+  // =====================================
+  // CHAT ID
+  // =====================================
+
+  function makeChatID(a,b) {
+
+    return [a,b].sort().join("_");
+
+  }
+
+
+  // =====================================
+  // SEND MESSAGE
+  // =====================================
+
+  window.sendMessage = async function() {
+
+    if(!selectedUser) {
+
+      alert("First select a user.");
+
+      return;
+
+    }
+
+
+    const input =
+      document.getElementById("messageInput");
+
+    const text =
+      input.value.trim();
+
+
+    if(!text) return;
+
+
+    const chatID =
+      makeChatID(
+        currentUser.uid,
+        selectedUser.uid
+      );
+
+
+    await addDoc(
+      collection(
+        db,
+        "chats",
+        chatID,
+        "messages"
+      ),
+      {
+
+        senderId: currentUser.uid,
+
+        receiverId: selectedUser.uid,
+
+        text: text,
+
+        timestamp: serverTimestamp()
+
+      }
+    );
+
+
+    input.value = "";
+
+  };
+
+</script>
+
+</body>
+</html>
